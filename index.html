@@ -47,7 +47,7 @@
 승객이 10분 정도 갇혔다. 다친 사람은 없다.
 9시 12분에 직원이 현장 확인하고 관제에 알렸다.
 문을 열고 승객을 내렸다.
-우리 시설물 이상 없음. 승객은 70대 남성 유재석.</textarea>
+우리 시설물 이상 없음. 승객은 70대 남성 유*석.</textarea>
   <p class="hint"><b>언제 보고하나요 (수신자 자동입력)</b></p>
   <select id="shift">
    <option value="day">주간 (평일)</option>
@@ -77,6 +77,16 @@ function piece(s, emptyOk, opt){
   const box = opt.box ? " recvbox" : "";
   const btn = opt.copy===false ? "" : '<button type="button" class="cp">복사</button>';
   return `<span class="v${box}" data-raw="${esc(raw)}">${shown}</span>${btn}`;
+}
+function maskName(n){
+  n=(n||"").trim();
+  if(!n || n==="홍길동") return n;
+  if(/^[가-힣]{3}$/.test(n)) return n[0]+"*"+n[2];
+  if(/^[가-힣]{4}$/.test(n)) return n[0]+"**"+n[3];
+  return n;
+}
+function maskPhone(s){
+  return String(s||"").replace(/(01[016789])-?\d{4}-?(\d{4})/g,"$1-****-$2");
 }
 function hour(h, text){
   h=+h;
@@ -145,8 +155,7 @@ function write(){
  const damage = dmgOn ? dmgText : "우리시설물 이상없음";
  let person=(t.match(/[^\n.]*\d{2}대[^\n.]*/)||[""])[0].trim();
  person=person.replace(/^(?:승객|손님|고객|취객)(?:은|이|를|을)?\s*/,"");
- person=person.replace(/(남성|여성|남자|여자)\s*([가-힣]{3})(?![가-힣])/g,(m,g,n)=>g+" "+n[0]+"*"+n.slice(2));
- person=person.replace(/(?<![가-힣])([가-힣]{3})\s+(\d{2}대)/g,(m,n,age)=>/승객|손님|고객|취객|사람|남성|여성|남자|여자/.test(n)?m:n[0]+"*"+n.slice(2)+" "+age);
+ person=person.replace(/(?<![가-힣])([가-힣]{2,4})(?![가-힣])/g,(m,n)=>/^(?:승객|손님|고객|취객|사람|남성|여성|남자|여자|홍길동)$/.test(n)?n:maskName(n));
  const times=[...t.matchAll(/(\d{1,2})시\s*(\d{1,2})분에?\s*([^.\n]+)/g)]
    .filter(m=>!(tm && m[1]===tm[1] && m[2]===tm[2] && /오전|오후|저녁|요일/.test(m[0])===false && m.index<40))
    .map(m=>`- ${hour(m[1],t)}:${m[2].padStart(2,"0")} ${shortLine(m[3])}`);
@@ -167,16 +176,16 @@ function write(){
  const when = [ymd&&ymd.replace(/-/g,". ")+".", dow&&`(${dow})`, hhmm].filter(Boolean).join(" ");
  const staffNames=(t.match(/직원\s+([가-힣]{2,4})/g)||[]).map(s=>s.replace("직원","").trim());
  const sabok=(t.match(/(?:사회복무요원|사복)\s*([가-힣]{2,4})/g)||[]).map(s=>s.replace(/사회복무요원|사복/,"").trim());
- const staff=[...staffNames.map(n=>"직원 "+n), ...sabok.map(n=>"사회복무요원 "+n)].join(", ");
+ const staff=[...staffNames.map(n=>"직원 "+maskName(n)), ...sabok.map(n=>"사회복무요원 "+maskName(n))].join(", ");
  const line=[station, place, kind].filter(Boolean).join(" ");
  const title=line;
  const what=kind ? "- "+line : "";
  const recv = night
    ? "종합관제소, 안전관리처, 가정관리역, 운수기획팀"
    : "종합관제소, 운수기획팀, 안전관리처";
- $("how").innerHTML = night
-   ? '<span class="red">스마트폰 문자 및 그룹웨어 메일 송부</span>\n\n스마트폰 문자\n김태식 010-8789-2932\n김재호 010-8904-1990\n박상용 010-4400-3617\n\n그룹웨어 메일\n박상용, 김동윤'
-   : '<span class="red">그룹웨어 메일송부(필요시) 및 유선통보</span>\n김동윤 4203\n박상용 4205';
+ $("how").innerHTML = maskPhone(night
+   ? '<span class="red">스마트폰 문자 및 그룹웨어 메일 송부</span>\n\n스마트폰 문자\n'+maskName('김태식')+' 010-8789-2932\n'+maskName('김재호')+' 010-8904-1990\n'+maskName('박상용')+' 010-4400-3617\n\n그룹웨어 메일\n'+maskName('박상용')+', '+maskName('김동윤')
+   : '<span class="red">그룹웨어 메일송부(필요시) 및 유선통보</span>\n'+maskName('김동윤')+' 4203\n'+maskName('박상용')+' 4205');
  const rows=[];
  if(!station) rows.push(["역","제목은 사고가 보이게 짧게, 장소에 역을 적으세요."]);
  if(!ymd||!hhmm) rows.push(["언제","발생일시에는 연, 월, 일, 시를 적으세요."]);
