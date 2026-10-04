@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상황보고</title>
+<style>
+ body{font-family:"Malgun Gothic",sans-serif;background:#eef1f4;margin:0;color:#111}
+ .top{background:#c2410c;color:#fff;padding:16px 20px;font-size:18px;font-weight:700;line-height:1.45}
+ .top b{color:#ffe08a}
+ .bar{background:#1f4e79;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+ .bar h1{font-size:18px;margin:0}
+ button{background:#1f4e79;color:#fff;border:0;padding:10px 16px;font:inherit;border-radius:4px;cursor:pointer}
+ .bar button{background:#fff;color:#1f4e79}
+ .wrap{display:grid;grid-template-columns:380px 1fr;gap:16px;padding:16px}
+ .box,.sheet{background:#fff;border:1px solid #d0d5dd;border-radius:8px;padding:14px} .fixbox{margin-top:16px}
+ p{font-size:13px;color:#444;margin:0 0 8px} .hint{font-size:13px;line-height:1.35;margin:8px 0 4px} .hint b{font-family:inherit;font-weight:700;color:#1f4e79;font-size:20px;display:block}
+ textarea,select,input[type=text],#dmgNote{width:100%;box-sizing:border-box;font:inherit;padding:10px}
+ textarea{min-height:200px}
+ input[type=checkbox]{width:22px;height:22px;vertical-align:middle}
+ .note{background:#f7f8fa;border:1px solid #d0d5dd;padding:8px;font-size:13px;white-space:pre-wrap} .note .red{color:#d00;font-weight:700}
+ .miss{background:#fff6d8;border:1px solid #e6d48a;padding:8px;font-size:13px;margin-top:8px;white-space:pre-wrap} .miss .tip{color:#1d4ed8}
+ table{width:100%;border-collapse:collapse;font-size:14px}
+ th,td{border:1px solid #9aa;padding:8px;vertical-align:top}
+ th{width:120px;background:#f7f8fa;text-align:left}
+ .v{white-space:pre-wrap}
+ button.cp{margin-left:8px;padding:3px 8px;font-size:12px;background:#e8eef5;color:#1f4e79;border:1px solid #1f4e79;border-radius:4px;vertical-align:middle}
+ button.cp.ok{background:#1f4e79;color:#fff}
+ h2{margin:0 0 8px}
+ .meta{text-align:right;font-size:12px;color:#555}
+ .gap{color:#b45309;font-weight:700}
+ .recvbox{display:inline-block;border:2px solid #d00;padding:2px 8px}
+ @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="top">
+1. <b>상황보고</b> 쓰기 <b>전</b>에 <b>종합관제소</b>에 전화<br>
+2. <b>초안</b>은 <b>안전담당자</b>와 <b>협의</b><br>
+3. <b>상황보고</b> 등록 <b>후</b> <b>역무일지</b>와 <b>MIS</b>에 기록
+</div>
+<div class="bar"><h1>상황보고</h1></div>
+<div class="wrap">
+ <div class="box">
+  <p class="hint"><b>자유롭게 적으세요</b></p>
+  <textarea id="memo">가정역 EL 3호기. 2026년 10월 3일 금요일 오전 9시 10분.
+승객이 10분 정도 갇혔다. 다친 사람은 없다.
+9시 12분에 직원이 현장 확인하고 관제에 알렸다.
+문을 열고 승객을 내렸다.
+우리 시설물 이상 없음. 승객은 70대 남성 유재석.</textarea>
+  <p class="hint"><b>언제 보고하나요 (수신자 자동입력)</b></p>
+  <select id="shift">
+   <option value="day">주간 (평일)</option>
+   <option value="night">야간 (토·일·공휴일)</option>
+  </select>
+  <div class="note" id="how"></div>
+  <p class="hint"><b>종합관제 보고유무</b></p>
+  <p><label><input type="checkbox" id="ctrl"> 보고완료</label></p>
+  <p class="hint"><b>우리 시설물 피해유무</b></p>
+  <p><label><input type="checkbox" id="dmg"> 이상 있음</label></p>
+  <input id="dmgNote" hidden placeholder="시설물 피해를 적으세요">
+  <p class="hint"><b>입력누락사항</b></p><div class="miss" id="miss"></div>
+ </div>
+ <div>
+  <div class="sheet" id="sheet"></div>
+  <div class="sheet fixbox"><p class="hint"><b>수정한 내용</b></p><div id="fixes"></div></div>
+ </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const WHO = "홍길동";
+const esc = s => (s||"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function piece(s, emptyOk, opt){
+  opt = opt || {};
+  const raw = s || "";
+  const shown = raw ? esc(raw).replaceAll("\n","<br>") : (emptyOk ? "" : '<span class="gap">확인 필요</span>');
+  const box = opt.box ? " recvbox" : "";
+  const btn = opt.copy===false ? "" : '<button type="button" class="cp">복사</button>';
+  return `<span class="v${box}" data-raw="${esc(raw)}">${shown}</span>${btn}`;
+}
+function hour(h, text){
+  h=+h;
+  if(/오후|저녁/.test(text) && h<12) h+=12;
+  return String(h).padStart(2,"0");
+}
+const fixes=[];
+function noteFix(from,to){ if(from!==to) fixes.push(from+" → "+to); }
+function shortLine(s){
+  const before=s.replace(/[.]/g,"").replace(/\s+/g," ").trim();
+  s=before;
+  s=s.replace(/반생/g,"발생").replace(/경찰에신고/g,"경찰에 신고");
+  s=s.replace(/했습니다|했어요|하였습니다|하였어요|합니다|해요/g,"");
+  s=s.replace(/했다|하였다/g,"");
+  s=s.replace(/습니다|입니다/g,"");
+  s=s.replace(/없습니다|없다/g,"없음");
+  s=s.replace(/있습니다|있다/g,"");
+  s=s.replace(/관제에\s*알렸(?:다|습니다)?/g,"관제 알림");
+  s=s.replace(/경찰에\s*신고했(?:다|습니다)?/g,"경찰 신고");
+  s=s.replace(/승객을\s*내(?:렸(?:다)?|림)/g,"승객 하차");
+  s=s.replace(/인근\s*파출소로\s*데려(?:감|갔다|갔음)?/g,"인근 파출소 인계");
+  s=s.replace(/직원이\s*/g,"");
+  s=s.replace(/보수\s*요청/g,"보수요청");
+  s=s.replace(/혔다/g,"힘").replace(/렸다/g,"림").replace(/냈다/g,"냄");
+  s=s.replace(/왔다/g,"옴").replace(/갔다/g,"감").replace(/됐다|되었다/g,"됨");
+  s=s.replace(/한다$|된다$|다$/g,"");
+  s=s.replace(/\s+,/g,",").replace(/,\s*/g,", ").replace(/\s+/g," ").trim();
+  s=s.replace(/,\s*$/,"").trim();
+  if(before && s && before!==s && !fixes.includes(before+" → "+s)) noteFix(before,s);
+  return s;
+}
+function write(){
+ fixes.length=0;
+ const t = $("memo").value;
+ const night = $("shift").value==="night";
+ const station = (t.match(/([가-힣A-Za-z0-9]+역)/)||[])[1]||"";
+ let ymd="";
+ const dm=t.match(/(20\d{2})[년.\- ]\s*(\d{1,2})[월.\- ]\s*(\d{1,2})/);
+ if(dm) ymd=`${dm[1]}-${dm[2].padStart(2,"0")}-${dm[3].padStart(2,"0")}`;
+ const dow=(t.match(/(월|화|수|목|금|토|일)요일/)||[])[1]||"";
+ const tm=t.match(/(?:저녁|오후|오전)?\s*(\d{1,2})시\s*(\d{1,2})분/);
+ const hhmm = tm ? `${hour(tm[1], t)}:${tm[2].padStart(2,"0")}` : "";
+ const equip = (t.match(/((?:EL|E\/S|승강기|에스컬레이터)\s*\d+\s*호기)/i)||[])[1]||"";
+ const spot = (t.match(/(승강장|대합실|개찰구|출입구|화장실|계단|맞이방|환승통로)/)||[])[1]||"";
+ const place = [equip, spot].filter(Boolean).join(" ");
+ function incidentOf(text){
+  const named=[["갇","승객 갇힘"],["끼","끼임"],["취객|난동|주취","취객 난동"],["쓰러|실신","쓰러짐"],["넘어|전도|낙상","넘어짐"],["추락|떨어","추락"],["화재|연기","화재"],["폭행|싸움|시비","폭행"],["출혈","출혈"],["분실|유실","분실"],["지연","열차 지연"],["고장|멈춤|정지","고장"]];
+  const hit=named.find(k=>new RegExp(k[0]).test(text));
+  if(hit) return hit[1];
+  const drop=s=>/확인|알리|신고|도착|안내|연락|개방|구조|이송|방송|하차|데려|시설|이상|남성|여성|남자|여자|\d{2}대|\d{4}\s*년|\d{1,2}\s*월|\d{1,2}\s*일|\d{1,2}\s*시/.test(s);
+  const bits=text.split(/[.\n]/).map(s=>s.trim()).filter(s=>s && !drop(s));
+  for(const raw of bits){
+    let s=shortLine(raw).replace(/(?:발생|반생|생김)$/,"").replace(/승객이|승객은|고객이|고객은/g,"");
+    s=s.replace(/[가-힣A-Za-z0-9]+역/g,"").replace(/(?:EL|E\/S|승강기|에스컬레이터)\s*\d+\s*호기/ig,"");
+    s=s.replace(/승강장|대합실|개찰구|출입구|화장실|계단|맞이방|환승통로/g,"").replace(/\s+/g," ").trim();
+    if(s) return s;
+  }
+  return "";
+ }
+ const kind=incidentOf(t);
+ const story=kind;
+ const injury = /다친\s*사람(?:은|이)?\s*없|부상\s*없/.test(t) ? "부상 없음" : "";
+ const dmgOn=$("dmg").checked;
+ $("dmgNote").hidden=!dmgOn;
+ const dmgText=shortLine($("dmgNote").value);
+ const damage = dmgOn ? dmgText : "우리시설물 이상없음";
+ let person=(t.match(/[^\n.]*\d{2}대[^\n.]*/)||[""])[0].trim();
+ person=person.replace(/^(?:승객|손님|고객|취객)(?:은|이|를|을)?\s*/,"");
+ person=person.replace(/(남성|여성|남자|여자)\s*([가-힣]{3})(?![가-힣])/g,(m,g,n)=>g+" "+n[0]+"*"+n.slice(2));
+ person=person.replace(/(?<![가-힣])([가-힣]{3})\s+(\d{2}대)/g,(m,n,age)=>/승객|손님|고객|취객|사람|남성|여성|남자|여자/.test(n)?m:n[0]+"*"+n.slice(2)+" "+age);
+ const times=[...t.matchAll(/(\d{1,2})시\s*(\d{1,2})분에?\s*([^.\n]+)/g)]
+   .filter(m=>!(tm && m[1]===tm[1] && m[2]===tm[2] && /오전|오후|저녁|요일/.test(m[0])===false && m.index<40))
+   .map(m=>`- ${hour(m[1],t)}:${m[2].padStart(2,"0")} ${shortLine(m[3])}`);
+ times.sort((a,b)=>a.localeCompare(b));
+ const hasClock = s => /\d{1,2}\s*시\s*\d{1,2}\s*분|\d{1,2}:\d{2}/.test(s);
+ const untimed = t.split(/[.\n]/).map(s=>s.trim()).filter(s=>s && /확인|알리|열|내리|신고|도착|안내|연락|조치|개방|구조|이송|방송|하차/.test(s) && !hasClock(s) && !/갇|다친|시설|남성|여성/.test(s));
+ const timed = [...($("ctrl").checked ? ["※종합관제 보고완료"] : []), ...times];
+ const gaps = untimed.map(s => shortLine(s));
+ const action = [...timed, ...gaps.map(s => "- "+s)].join("\n");
+ function actionCell(){
+  if(!timed.length && !gaps.length) return piece("");
+  const html = [
+    ...timed.map(s => esc(s)),
+    ...gaps.map(s => '- <span class="gap">확인 필요</span> ' + esc(s))
+  ].join("<br>");
+  return `<span class="v" data-raw="${esc(action)}">${html}</span><button type="button" class="cp">복사</button>`;
+ }
+ const when = [ymd&&ymd.replace(/-/g,". ")+".", dow&&`(${dow})`, hhmm].filter(Boolean).join(" ");
+ const staffNames=(t.match(/직원\s+([가-힣]{2,4})/g)||[]).map(s=>s.replace("직원","").trim());
+ const sabok=(t.match(/(?:사회복무요원|사복)\s*([가-힣]{2,4})/g)||[]).map(s=>s.replace(/사회복무요원|사복/,"").trim());
+ const staff=[...staffNames.map(n=>"직원 "+n), ...sabok.map(n=>"사회복무요원 "+n)].join(", ");
+ const line=[station, place, kind].filter(Boolean).join(" ");
+ const title=line;
+ const what=kind ? "- "+line : "";
+ const recv = night
+   ? "종합관제소, 안전관리처, 가정관리역, 운수기획팀"
+   : "종합관제소, 운수기획팀, 안전관리처";
+ $("how").innerHTML = night
+   ? '<span class="red">스마트폰 문자 및 그룹웨어 메일 송부</span>\n\n스마트폰 문자\n김태식 010-8789-2932\n김재호 010-8904-1990\n박상용 010-4400-3617\n\n그룹웨어 메일\n박상용, 김동윤'
+   : '<span class="red">그룹웨어 메일송부(필요시) 및 유선통보</span>\n김동윤 4203\n박상용 4205';
+ const rows=[];
+ if(!station) rows.push(["역","제목은 사고가 보이게 짧게, 장소에 역을 적으세요."]);
+ if(!ymd||!hhmm) rows.push(["언제","발생일시에는 연, 월, 일, 시를 적으세요."]);
+ if(!place) rows.push(["어디","발생장소는 상황이 난 곳과 몇 호기를 적으세요."]);
+ if(!story) rows.push(["무슨 일","사고내용은 한 줄로 요약하세요."]);
+ if(!times.length && !untimed.length) rows.push(["어떻게 했는지","조치사항은 시간대별로 개조식으로 3줄 이상 적으세요."]);
+ if(untimed.length) rows.push(["조치 시간: "+untimed.map(shortLine).join(", "),"시간이 빠진 조치는 몇 시 몇 분인지 적으세요."]);
+ if(times.length && times.length<3) rows.push(["조치사항","조치사항은 3줄 이상이 좋습니다."]);
+ if(dmgOn && !damage) rows.push(["시설물 이상","이상 있음을 체크했으면 시설물 피해 내용을 적으세요."]);
+ if(!person) rows.push(["사고자","사고자는 나이, 성별, 이름을 적으세요. 이름 가운데는 별표로 바뀝니다."]);
+ if(!staff) rows.push(["근무자","근무자는 직원, 사회복무요원 순서로 적으세요."]);
+ $("miss").innerHTML = rows.length ? rows.map((r,i)=>esc((i+1)+". "+r[0])+"\n"+'<span class="tip">'+esc(r[1])+"</span>").join("\n") : "입력누락사항 없음.";
+ $("fixes").innerHTML = fixes.length ? fixes.map(x=>"- "+esc(x)).join("<br>") : "없음";
+ $("sheet").innerHTML = `<p class="meta">인쇄자 : ${esc(WHO)} / ${esc(station)}</p><h2>상황보고</h2><table>
+ <tr><th>등록인</th><td>${piece(WHO,false,{copy:false})}</td><th>부서명</th><td>${piece(station)}</td></tr>
+ <tr><th>등록일</th><td>${piece(ymd,false,{copy:false})}</td><th>근무자</th><td>${piece(staff)}</td></tr>
+ <tr><th>제목</th><td colspan="3">${piece(title)}</td></tr>
+ <tr><th>수신자</th><td colspan="3">${piece(recv,false,{copy:false,box:true})}</td></tr>
+ <tr><th>일시</th><td>${piece(when)}</td><th>장소</th><td>${piece([station,place].filter(Boolean).join(" "))}</td></tr>
+ <tr><th>사고내용</th><td colspan="3">${piece(what)}</td></tr>
+ <tr><th>조치사항</th><td colspan="3">${actionCell()}</td></tr>
+ <tr><th>피해상황</th><td colspan="3">${piece(damage&&"- "+damage)}</td></tr>
+ <tr><th>사고자 인적사항</th><td colspan="3">${piece(person&&"- "+person)}</td></tr>
+ <tr><th>기타사항</th><td colspan="3">${piece("- 고객민원 없음")}</td></tr>
+ </table>`;
+}
+$("shift").onchange=write;
+$("ctrl").onchange=write;
+$("dmg").onchange=write;
+$("dmgNote").oninput=write;
+$("memo").oninput=write;
+$("sheet").addEventListener("click", async (e)=>{
+  const b = e.target.closest("button.cp");
+  if(!b) return;
+  const raw = b.previousElementSibling?.dataset.raw || "";
+  try{ await navigator.clipboard.writeText(raw); }
+  catch{ return; }
+  b.textContent = "복사됨";
+  b.classList.add("ok");
+  setTimeout(()=>{ b.textContent="복사"; b.classList.remove("ok"); }, 900);
+});
+write();
+</script>
+</body></html>
